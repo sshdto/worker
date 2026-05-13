@@ -1,0 +1,33 @@
+{
+    "name": "@sshdto/worker",
+    "version": "1.0.0",
+    "description": "Cloudflare worker for sshd.to",
+    "main": "src/index.js",
+    "directories": {
+        "lib": "src",
+        "test": "test"
+    },
+    "scripts": {
+        "dev": "wrangler dev",
+        "lint": "prettier --check --write .",
+        "test": "vitest --run --coverage",
+        "typegen": "wrangler types",
+        "deploy": "wrangler deploy"
+    },
+    "publishConfig": {
+        "access": "public"
+    },
+    "repository": {
+        "type": "git",
+        "url": "git+ssh://git@gitlab.com/sshdto/worker.git"
+    },
+    "author": "Honza Hommer <honza@cnt.cz>",
+    "license": "UNLICENSED",
+    "devDependencies": {
+        "@types/node": "^25.9.1",
+        "@vitest/coverage-istanbul": "^4.1.7",
+        "prettier": "^3.8.3",
+        "vitest": "^4.1.7",
+        "wrangler": "^4.90.1"
+    }
+}

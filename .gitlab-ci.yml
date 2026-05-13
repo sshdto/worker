@@ -1,0 +1,51 @@
+image: node:26
+
+stages:
+  - test
+  - release
+
+cache:
+  paths:
+    - .npm/
+    - node_modules/
+
+variables:
+  GIT_DEPTH: 0
+  NPM_TOKEN: ${CI_JOB_TOKEN}
+
+lint:
+  stage: test
+  before_script:
+    - npm install -D
+  script:
+    - npm run lint
+  allow_failure: true
+
+test:
+  stage: test
+  before_script:
+    - npm install -D
+  script:
+    - npm test
+  coverage: '/All files[^|]*\|[^|]*\s+([\d\.]+)/'
+  artifacts:
+    paths:
+      - coverage/
+    reports:
+      coverage_report:
+        coverage_format: cobertura
+        path: coverage/coverage-final.json
+    expire_in: 1 week
+
+release:
+  stage: release
+  image: registry.gitlab.com/gitlab-org/release-cli:latest
+  rules:
+    - if: $CI_COMMIT_TAG
+  script:
+    - echo "Running release"
+    - echo "Create release ${CI_COMMIT_TAG}"
+  release:
+    tag_name: "${CI_COMMIT_TAG}"
+    name: "Release ${CI_COMMIT_TAG}"
+    description: "Automated release for version ${CI_COMMIT_TAG}"
