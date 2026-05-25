@@ -12,8 +12,11 @@ export default {
 
         try {
             if (!env.BASE_URL) {
+                console.log('[Configuration Error] BASE_URL is not defined in environment variables.');
                 return textResponse(422, 'BASE_URL is not defined in the environment variables.');
             }
+
+            console.log(`[Request] Incoming request from IP ${request.headers.get('cf-connecting-ip')} (User-Agent ${request.headers.get('user-agent')}) to URL ${request.url}.`);
 
             // Safely parse BASE_URL (can be a single string or a JSON array of strings)
             let baseURLs = [];
@@ -31,12 +34,23 @@ export default {
             // Extract user from URL and apply mapping if exists
             const url = new URL(request.url);
             let user = url.pathname.slice(1);
+
+            // Validate that a user identifier is present in the URL path
+            if (!user) {
+                console.log('[Validation] Missing user identifier in URL path.');
+                return textResponse(400, 'User identifier is missing in the URL path.');
+            }
+
+            // Apply user mapping if the original user has a mapped value
             if (userMap[user]) {
+                console.log(`[User Mapping] Mapping user "${user}" to "${userMap[user]}".`);
+
                 user = userMap[user];
             }
 
             // Check if the user is banned
             if (userBan.includes(user)) {
+                console.log(`[User Ban] User "${user}" is banned from accessing the service.`);
                 return textResponse(403, `User "${user}" is banned from accessing the service.`);
             }
 
@@ -51,13 +65,13 @@ export default {
             const cachedResponse = await cache.match(cacheKey);
 
             if (cachedResponse) {
-                console.log(`[Cache] Hit for user: ${user}`);
+                console.log(`[Cache] Hit for user ${user}. Serving cached response.`);
                 return cachedResponse;
             }
             // ------------------------
 
             // Failover mechanism: try upstreams sequentially
-            let lastErrorMsg = 'No upstream available';
+            let lastErrorMsg = 'No upstream available.';
             let lastStatus = 502;
 
             for (const baseURL of baseURLs) {
@@ -90,30 +104,30 @@ export default {
 
                         lastStatus = 502;
                         lastErrorMsg = `Upstream ${baseURL} returned an empty response.`;
-                        console.warn(`[Failover] Empty body from: ${requestURL}`);
+                        console.log(`[Failover] Empty body from upstream ${requestURL}.`);
                         continue;
                     }
 
                     // Handle non-2xx HTTP responses (e.g., 500, 404)
                     lastStatus = response.status;
-                    lastErrorMsg = `Upstream error from ${baseURL}: ${response.status} ${response.statusText}`;
-                    console.warn(`[Failover] HTTP ${response.status} from: ${requestURL}`);
+                    lastErrorMsg = `Upstream error from ${baseURL} - ${response.status} ${response.statusText}.`;
+                    console.log(`[Failover] HTTP ${response.status} from ${requestURL}.`);
                 } catch (fetchErr) {
                     // Catch network errors (DNS failures, connection timeouts)
                     const errMsg = fetchErr instanceof Error ? fetchErr.message : String(fetchErr);
                     lastStatus = 502;
-                    lastErrorMsg = `Network error connecting to ${baseURL}: ${errMsg}`;
-                    console.warn(`[Failover] Network error on: ${requestURL} - ${errMsg}`);
+                    lastErrorMsg = `Network error connecting to ${baseURL} - ${errMsg}.`;
+                    console.log(`[Failover] Network error on ${requestURL} - ${errMsg}.`);
                 }
             }
 
             // If the loop finished, all configured upstreams failed
-            console.error(`[Failover Failed] All upstreams failed for user: ${user}`);
+            console.log(`[Failover Failed] All upstreams failed for user ${user}.`);
             return textResponse(lastStatus, lastErrorMsg);
         } catch (err) {
-            console.error('[Worker Fatal Error]', err);
+            console.log('[Worker Fatal Error]', err.message || err);
             const errMsg = err instanceof Error ? err.message : String(err);
-            return textResponse(err.status || 500, `Worker error: ${errMsg}`);
+            return textResponse(err.status || 500, `Worker error ${errMsg}.`);
         }
     },
 };
