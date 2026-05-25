@@ -35,8 +35,8 @@ _How to test it:_
 
 1. **Routing:** The Worker extracts the user identifier from the URL path (e.g., `https://your-worker.com/john_doe` -> user is `john_doe`).
 2. **Mapping & Bans:** It checks if `john_doe` is mapped to another username or if they are banned.
-    - Mapping: [honza](https://keys.sshd.to/honza) is mapped to [honzahommer](https://keys.sshd.to/honza)
-    - Bans: [root](https://keys.sshd.to/root) is banned
+   - Mapping: [honza](https://keys.sshd.to/honza) is mapped to [honzahommer](https://keys.sshd.to/honza)
+   - Bans: [root](https://keys.sshd.to/root) is banned
 3. **Cache Lookup:** It checks if the requested data for this user is already cached. If yes, it returns it instantly.
 4. **Upstream Fetch:** If it's a cache miss, it loops through your defined `BASE_URL` targets, replaces `%s` with the username, and fetches the data.
 5. **Caching & Delivery:** Upon a successful non-empty response, it saves the result to Cloudflare's cache for 5 minutes and returns the data to the client.

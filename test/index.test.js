@@ -30,6 +30,74 @@ describe('Cloudflare Worker - Failover & Cache Proxy', () => {
         };
     });
 
+    it('should return 422 if BASE_URL is completely missing (Lines 15-16)', async () => {
+        delete env.BASE_URL;
+        const request = new Request('https://worker.local/real_user');
+
+        const response = await worker.fetch(request, env, ctx);
+
+        expect(response.status).toBe(422);
+        expect(response.headers.get('status-message')).toContain('BASE_URL is not defined');
+    });
+
+    it('should fallback to treating BASE_URL as a plain string if JSON.parse fails (Line 27)', async () => {
+        // Change BASE_URL into a plain unparseable string with a placeholder
+        env.BASE_URL = 'https://fallback-single-server.com/%s';
+        const request = new Request('https://worker.local/real_user');
+
+        vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response('fallback_ok', { status: 200 }));
+
+        const response = await worker.fetch(request, env, ctx);
+
+        expect(response.status).toBe(200);
+        expect(await response.text()).toBe('fallback_ok');
+        expect(globalThis.fetch).toHaveBeenCalledWith('https://fallback-single-server.com/real_user', expect.any(Request));
+    });
+
+    it('should return 400 Bad Request if the user identifier path is empty (Lines 40-41)', async () => {
+        const request = new Request('https://worker.local/');
+
+        const response = await worker.fetch(request, env, ctx);
+
+        expect(response.status).toBe(400);
+        expect(response.headers.get('status-message')).toContain('User identifier is missing');
+    });
+
+    it('should correctly remap user according to USER_MAP', async () => {
+        const request = new Request('https://worker.local/alias');
+
+        vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response('data', { status: 200 }));
+
+        await worker.fetch(request, env, ctx);
+
+        expect(globalThis.fetch).toHaveBeenCalledWith('https://primary.com/real_user', expect.any(Request));
+    });
+
+    it('should return 403 Forbidden if user is banned', async () => {
+        const request = new Request('https://worker.local/banned_user');
+
+        const response = await worker.fetch(request, env, ctx);
+
+        expect(response.status).toBe(403);
+        expect(response.headers.get('status-message')).toContain('banned');
+        expect(globalThis.fetch).not.toHaveBeenCalled();
+    });
+
+    it('should instantly return cached response on cache hit (Lines 68-69)', async () => {
+        const request = new Request('https://worker.local/real_user');
+        const simulatedCachedResponse = new Response('cached_data_xyz', { status: 200 });
+
+        // Force cache match to resolve with a mock response instead of null
+        vi.spyOn(globalThis.caches.default, 'match').mockResolvedValueOnce(simulatedCachedResponse);
+
+        const response = await worker.fetch(request, env, ctx);
+
+        expect(response.status).toBe(200);
+        expect(await response.text()).toBe('cached_data_xyz');
+        // Cache hit must bypass the upstream fetch network layer completely
+        expect(globalThis.fetch).not.toHaveBeenCalled();
+    });
+
     it('should successfully fetch data from primary upstream and cache it', async () => {
         const request = new Request('https://worker.local/real_user');
 
@@ -75,24 +143,19 @@ describe('Cloudflare Worker - Failover & Cache Proxy', () => {
         expect(await response.text()).toBe('valid_backup_data');
     });
 
-    it('should return 403 Forbidden if user is banned', async () => {
-        const request = new Request('https://worker.local/banned_user');
+    it('should catch network-level exceptions and apply fallback (Lines 117-120)', async () => {
+        const request = new Request('https://worker.local/real_user');
+
+        // Force primary to simulate a DNS failure or generic TypeError, backup recovers
+        vi.spyOn(globalThis, 'fetch')
+            .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+            .mockResolvedValueOnce(new Response('backup_recovered', { status: 200 }));
 
         const response = await worker.fetch(request, env, ctx);
 
-        expect(response.status).toBe(403);
-        expect(response.headers.get('status-message')).toContain('banned');
-        expect(globalThis.fetch).not.toHaveBeenCalled();
-    });
-
-    it('should correctly remap user according to USER_MAP', async () => {
-        const request = new Request('https://worker.local/alias');
-
-        vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response('data', { status: 200 }));
-
-        await worker.fetch(request, env, ctx);
-
-        expect(globalThis.fetch).toHaveBeenCalledWith('https://primary.com/real_user', expect.any(Request));
+        expect(response.status).toBe(200);
+        expect(await response.text()).toBe('backup_recovered');
+        expect(globalThis.fetch).toHaveBeenCalledTimes(2);
     });
 
     it('should return last upstream error if all servers fail', async () => {
@@ -106,5 +169,18 @@ describe('Cloudflare Worker - Failover & Cache Proxy', () => {
 
         expect(response.status).toBe(504);
         expect(response.headers.get('status-message')).toContain('Upstream error from https://backup.com');
+    });
+
+    it('should gracefully handle malformed USER_MAP in environment variables', async () => {
+        const request = new Request('https://worker.local/real_user');
+
+        // Sabotage env parsing parameters dynamically to force a fatal execution error
+        // e.g., mapping properties to cause a native runtime error during application
+        env.USER_MAP = '{"name": "John","age": 30,}'; // Malformed JSON with trailing comma will throw an error when line 24 attempts `JSON.parse(env.USER_MAP)`
+
+        const response = await worker.fetch(request, env, ctx);
+
+        expect(response.status).toBe(500);
+        expect(response.headers.get('status-message')).toContain('Worker error');
     });
 });
