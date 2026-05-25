@@ -126,8 +126,7 @@ export default {
             return textResponse(lastStatus, lastErrorMsg);
         } catch (err) {
             console.log('[Worker Fatal Error]', err.message || err);
-            const errMsg = err instanceof Error ? err.message : String(err);
-            return textResponse(err.status || 500, `Worker error ${errMsg}.`);
+            return textResponse(err.status || 500, `Worker error ${err instanceof Error ? err.message : String(err)}.`);
         }
     },
 };
