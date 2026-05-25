@@ -1,6 +1,6 @@
 {
   "name": "@sshdto/worker",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Cloudflare worker for sshd.to",
   "main": "src/index.js",
   "directories": {
