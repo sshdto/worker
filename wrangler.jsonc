@@ -30,11 +30,6 @@
   ],
   "workers_dev": false,
   "preview_urls": false,
-  "vars": {
-    "BASE_URL": "[\n\"https://github.com/%s.keys\", \"https://gitlab.com/%s.keys\"\n]",
-    "USER_BAN": "[\"root\"]",
-    "USER_MAP": "{\"honza\":\"honzahommer\"}",
-  },
   /**
    * Smart Placement
    * https://developers.cloudflare.com/workers/configuration/smart-placement/#smart-placement
