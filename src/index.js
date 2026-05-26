@@ -10,13 +10,31 @@ export default {
                 },
             });
 
+        // Helper function to check if a search string matches any pattern in a list,
+        // supporting wildcard '*' and negation '!' patterns
+        const matchesPatternList = (search, list = []) => {
+            const match = (pattern) => {
+                const regexStr = '^' + pattern.replace(/\*/g, '.*') + '$';
+                return new RegExp(regexStr).test(search);
+            };
+
+            const matchingRule = list.find((rule) => {
+                const cleanRule = rule.startsWith('!') ? rule.slice(1) : rule;
+                return match(cleanRule);
+            });
+
+            return matchingRule ? !matchingRule.startsWith('!') : false;
+        };
+
         try {
             if (!env.BASE_URL) {
                 console.log('[Configuration Error] BASE_URL is not defined in environment variables.');
                 return textResponse(422, 'BASE_URL is not defined in the environment variables.');
             }
 
-            console.log(`[Request] Incoming request from IP ${request.headers.get('cf-connecting-ip')} (User-Agent ${request.headers.get('user-agent')}) to URL ${request.url}.`);
+            console.log(
+                `[Request] Incoming request from IP ${request.headers.get('cf-connecting-ip')} (User-Agent ${request.headers.get('user-agent')}) to URL ${request.url}.`,
+            );
 
             // Safely parse BASE_URL (can be a single string or a JSON array of strings)
             let baseURLs = [];
@@ -44,12 +62,11 @@ export default {
             // Apply user mapping if the original user has a mapped value
             if (userMap[user]) {
                 console.log(`[User Mapping] Mapping user "${user}" to "${userMap[user]}".`);
-
                 user = userMap[user];
             }
 
             // Check if the user is banned
-            if (userBan.includes(user)) {
+            if (matchesPatternList(user, userBan)) {
                 console.log(`[User Ban] User "${user}" is banned from accessing the service.`);
                 return textResponse(403, `User "${user}" is banned from accessing the service.`);
             }
