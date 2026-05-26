@@ -73,16 +73,6 @@ describe('Cloudflare Worker - Failover & Cache Proxy', () => {
         expect(globalThis.fetch).toHaveBeenCalledWith('https://primary.com/real_user', expect.any(Request));
     });
 
-    it('should return 403 Forbidden if user is banned', async () => {
-        const request = new Request('https://worker.local/banned_user');
-
-        const response = await worker.fetch(request, env, ctx);
-
-        expect(response.status).toBe(403);
-        expect(response.headers.get('status-message')).toContain('banned');
-        expect(globalThis.fetch).not.toHaveBeenCalled();
-    });
-
     it('should instantly return cached response on cache hit (Lines 68-69)', async () => {
         const request = new Request('https://worker.local/real_user');
         const simulatedCachedResponse = new Response('cached_data_xyz', { status: 200 });
@@ -182,5 +172,73 @@ describe('Cloudflare Worker - Failover & Cache Proxy', () => {
 
         expect(response.status).toBe(500);
         expect(response.headers.get('status-message')).toContain('Worker error');
+    });
+
+    describe('Worker User Ban / ACL Tests', () => {
+        let env;
+
+        beforeEach(() => {
+            env = {
+                BASE_URL: '["https://primary.com/%s", "https://backup.com/%s"]',
+                USER_MAP: '{"alias": "real_user"}',
+                USER_BAN: '["!deploy*", "root", "*", "!admin"]',
+            };
+
+            if (globalThis.fetch && globalThis.fetch.mockClear) {
+                globalThis.fetch.mockClear();
+            }
+        });
+
+        it('should return 403 Forbidden if user is banned by exact match (root)', async () => {
+            const request = new Request('https://worker.local/root');
+            const response = await worker.fetch(request, env, ctx);
+
+            expect(response.status).toBe(403);
+            expect(response.headers.get('status-message')).toContain('banned');
+            expect(globalThis.fetch).not.toHaveBeenCalled();
+        });
+
+        it('should return 403 Forbidden if user falls into fallback ban (*)', async () => {
+            const request = new Request('https://worker.local/random_user');
+            const response = await worker.fetch(request, env, ctx);
+
+            expect(response.status).toBe(403);
+            expect(response.headers.get('status-message')).toContain('banned');
+            expect(globalThis.fetch).not.toHaveBeenCalled();
+        });
+
+        it('should allow user if matched by an allow prefix (!deploy*)', async () => {
+            const request = new Request('https://worker.local/deploy-bot');
+            const response = await worker.fetch(request, env, ctx);
+
+            expect(response.status).not.toBe(403);
+            expect(globalThis.fetch).toHaveBeenCalled();
+        });
+
+        it('should allow user if matched exactly by allow prefix (!deploy)', async () => {
+            const request = new Request('https://worker.local/deploy');
+            const response = await worker.fetch(request, env, ctx);
+
+            expect(response.status).not.toBe(403);
+            expect(globalThis.fetch).toHaveBeenCalled();
+        });
+
+        it('should return 403 Forbidden for admin because it is placed after the fallback wildcard', async () => {
+            const request = new Request('https://worker.local/admin');
+            const response = await worker.fetch(request, env, ctx);
+
+            expect(response.status).toBe(403);
+            expect(response.headers.get('status-message')).toContain('banned');
+            expect(globalThis.fetch).not.toHaveBeenCalled();
+        });
+
+        it('should allow access if USER_BAN array is empty', async () => {
+            env.USER_BAN = '[]';
+            const request = new Request('https://worker.local/any_user');
+            const response = await worker.fetch(request, env, ctx);
+
+            expect(response.status).not.toBe(403);
+            expect(globalThis.fetch).toHaveBeenCalled();
+        });
     });
 });

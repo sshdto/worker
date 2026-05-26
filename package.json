@@ -12,7 +12,8 @@
     "lint": "prettier --check --write .",
     "test": "vitest --run --coverage",
     "typegen": "wrangler types",
-    "deploy": "wrangler deploy"
+    "deploy": "wrangler deploy",
+    "release": "semantic-release"
   },
   "publishConfig": {
     "access": "public"
@@ -24,9 +25,13 @@
   "author": "Honza Hommer <honza@cnt.cz>",
   "license": "UNLICENSED",
   "devDependencies": {
+    "@semantic-release/git": "^10.0.1",
+    "@semantic-release/gitlab": "^13.3.2",
+    "@semantic-release/npm": "^13.1.5",
     "@types/node": "^25.9.1",
     "@vitest/coverage-istanbul": "^4.1.7",
     "prettier": "^3.8.3",
+    "semistandard": "^17.0.0",
     "vitest": "^4.1.7",
     "wrangler": "^4.90.1"
   }
